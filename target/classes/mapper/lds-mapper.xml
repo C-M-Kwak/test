@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="ldsMapper">
+
+	<select id="selectData" resultType="Map">
+		SELECT idx, bandID, bandName, etc FROM BANDINFO
+	</select>
+	
+	<select id="selectCalTotal" parameterType="Map" resultType="Map">
+
+		SELECT `lds2022setid1`.`bpm`,
+		    `lds2022setid1`.`sec`,
+		    `lds2022setid1`.`cal`,
+			`lds2022setid1`.`totalCal10`,
+			`lds2022setid1`.`totalCal15`,
+			`lds2022setid1`.`totalCal20`,
+			`lds2022setid1`.`totalCal25`,
+		    `lds2022setid1`.`totalCal5`
+		FROM `lds2022setid1` 
+		WHERE 1 = 1 
+		AND  `lds2022setid1`.`sec` = #{sec}    
+
+	</select>
+	
+	<select id="selectAgeRange" resultType="Map">
+		select age 
+		from lds2022setid2 
+		group by age 
+		order by cast(replace(age, '대', '') as unsigned)
+	</select>
+	
+	<select id="selectPopulation" parameterType="Map" resultType="Map">
+	
+		SELECT 
+			gender,
+			age,
+			cast(avg(gdsPoint) as char(10)) as count
+		FROM `lds2022setid2`
+		WHERE 1 = 1
+		AND `lds2022setid2`.`gender` in (
+		<foreach collection="gender" item="g" separator=",">#{g}</foreach>
+			)
+		AND `lds2022setid2`.`age` in (
+		<foreach collection="age" item="a" separator=",">#{a}</foreach>
+			)
+		GROUP BY GENDER, AGE
+		ORDER BY CAST(REPLACE(AGE, '대', '') AS UNSIGNED), GENDER
+		
+	</select>
+	
+	<select id="selectAddressDistribution" parameterType="Map" resultType="Map">
+	
+		SELECT  address,
+				cast(avg(gdsPoint) as char(10)) as count
+		FROM `lds2022setid2`
+		WHERE 1 = 1
+		AND `lds2022setid2`.`gender` = #{gender}
+		AND `lds2022setid2`.`age` = #{age}
+		GROUP BY ADDRESS
+		ORDER BY ADDRESS
+		
+	</select>
+	
+	<select id="selectCoordinateData" parameterType="Map" resultType="Map">
+		
+		SELECT  `lds2022setid3`.`uuid`,
+    			`lds2022setid3`.`fileName`,
+    			`lds2022setid3`.`json`
+		FROM  `lds2022setid3`
+		WHERE `lds2022setid3`.`uuid` = #{uuid}
+		
+	</select>
+
+	<select id="selectRandomQuestion" resultType="Map">
+	
+		SELECT  *
+		FROM `lds2022setid4`
+		WHERE isOpener = 'y'
+		ORDER BY rand() LIMIT 1
+		
+	</select>
+	
+	<select id="selectOpenerQuestions" resultType="Map">
+		
+		SELECT  *
+		FROM `lds2022setid4`
+		WHERE isOpener = 'y'
+		
+	</select>
+	
+	<select id="selectAnswer" parameterType="Map" resultType="Map">
+		
+		select id, 
+			   question, 
+		       answer, 
+		       linkId, 
+		       match(question) against(' *${question}* ') as score 
+		from 
+			(
+				select * from lds2022setid4 where linkId != ''
+		    ) a
+		where match(question) against(' *${question}* ')
+		order by score desc
+		limit 1	
+		
+	</select>
+	
+	<select id="selectNextQuestion" parameterType="Map" resultType="Map">
+	
+		SELECT id, question, answer, linkId
+		FROM lds2022setid4 
+		WHERE id = ${id}+1 and linkId = #{linkid}
+	
+	</select>
+	
+	<select id="selectHashTagUsage" parameterType="Map" resultType="Map">
+	
+		select hashTag, 
+		       count(hashTag) as cnt,
+		       sum(likeCnt) as likeCnt  
+		from lds2022setid6 
+		<where>
+		   <if test="startDate != null and endDate != null">
+		       and createDate between #{startDate} and #{endDate} 
+		   </if>
+		   <if test="dataType != null">
+			   and dataType in ( <foreach collection="dataType" item="a" separator=",">#{a}</foreach> )
+		   </if>
+	    </where>
+		group by hashTag 
+		order by cnt desc 
+		limit 20
+	
+	</select>
+	
+	<select id="selectLinkedTagUsage" parameterType="Map" resultType="Map">
+		
+		select *, 
+		       count(tt1.profileId) as cnt, 
+		       sum(tt1.likeCnt) as likeSum 
+		from ( select t1.* 
+		       from lds2022setid6 t1 right outer join ( select tagID  
+		                          from lds2022setid6 
+		                          <where>
+								       <if test="tag != null or tag !=''">
+										   and hashTag = #{tag}
+								       </if>
+									   <if test="startDate != null and endDate != null">
+									       and createDate between STR_TO_DATE(  #{startDate} , '%Y-%m-%d')  and STR_TO_DATE(  #{endDate} , '%Y-%m-%d')  
+									   </if>
+									   <if test="dataType != null">
+										   and dataType in ( <foreach collection="dataType" item="a" separator=",">#{a}</foreach> )
+									   </if>
+								  </where>
+		                                  				) t2 on t1.tagID = t2.tagID
+		       where t1.createDate between STR_TO_DATE(  #{startDate} , '%Y-%m-%d') and STR_TO_DATE(  #{endDate} , '%Y-%m-%d') 
+		       <if test="dataType != null">
+			   		and dataType in ( <foreach collection="dataType" item="a" separator=",">#{a}</foreach> )
+			   </if>  
+			 ) tt1 
+		where tt1.hashTag not in ( #{tag} )  
+		group by tt1.profileId 
+		limit 20
+	
+	</select>
+	
+	<select id="selectCarCo2Data" parameterType="Map" resultType="Map">
+	
+		select dr.distanceRange, 
+			   count(*) as cnt, 
+			   format(avg(dr.duration), 2) as avgDuration,
+		       format(avg(dr.co2), 2) as avgCo2,
+		       format(avg(dr.co2Best), 2) as avgCo2Best,
+		       format(avg(dr.maxSpd), 2) as avgMaxSpd,
+		       dr.co2CarType,
+		       min(dr.co2Best) as co2Min
+		from (select *, case
+				when distance between 10 and 20 then '10~20'
+				when distance between 20 and 30 then '20~30'
+				when distance between 30 and 40 then '30~40'
+				when distance between 40 and 50 then '40~50'
+				when distance between 50 and 60 then '50~60'
+				when distance between 60 and 70 then '60~70'
+				when distance between 70 and 80 then '70~80'
+				when distance between 80 and 90 then '80~90'
+				when distance between 90 and 100 then '90~100'
+				when distance > 100 then '100~'
+				end as distanceRange
+				from lds2022setid7
+			) dr
+		where distanceRange is not null
+		<if test="carType != 'ALL'">
+			and co2CarType = #{carType}
+		</if>
+		and cast(substring_index(distanceRange, '~', 1)  as unsigned) between #{startDR} and #{endDR}
+		and dr.duration between #{minDuration} and #{maxDuration}
+		group by dr.distanceRange 
+		order by cast(substring_index(distanceRange, '~', 1)  as unsigned)
+		
+	</select>
+	
+	<select id="selectRecommend" parameterType="Map" resultType="Map">
+	
+		select a.recommend
+			from (
+					select SUBSTRING_INDEX(recommend, ',', -1) as recommend 
+					from lds2022setid8
+					where 1 = 1 
+					and (     
+							   (  ${belowSize} between belowSize - 10 and belowSize + 10 )
+							   or (  ${upperSize} between upperSize - 10 and upperSize + 10 )
+							   or ( #{cup} = cup )
+							   or ( shape = #{shape} )
+						) 
+					group by recommend
+				 ) a
+		group by a.recommend
+	
+	</select>
+	
+	<select id="selectHospitalCount" parameterType="Map" resultType="Map">
+	
+		select substring_index(substring_index(address, ' ', 2), ' ', -1) as district,
+			   sum(croType1) as croType1,
+		       sum(croType2) as croType2,
+		       sum(croType3) as croType3,
+		       sum(croType4) as croType4,
+		       sum(croType5) as croType5,
+		       sum(croType6) as croType6,
+		       sum(croType7) as croType7,
+		       sum(croType8) as croType8,
+		       sum(croType9) as croType9
+		from ( select address ,
+				   case when croType = '종합병원' then 1 else 0 end as croType1 , 
+				   case when croType = '병원' then 1 else 0 end as croType2 ,
+				   case when croType = '치과병원' then 1 else 0 end as croType3 ,
+				   case when croType = '한방병원' then 1 else 0 end as croType4 ,
+				   case when croType = '요양병원' then 1 else 0 end as croType5 ,
+				   case when croType = '정신병원' then 1 else 0 end as croType6 ,
+				   case when croType = '의원' then 1 else 0 end as croType7 ,
+				   case when croType = '치과의원' then 1 else 0 end as croType8 ,
+				   case when croType = '한의원' then 1 else 0 end as croType9 
+			from lds2022setid9 
+			where 1 = 1   
+			and croType in (<foreach collection="croType" item="c" separator=",">#{c}</foreach>)
+			<if test='service == "y"'>
+	        	and serviceScopeCategory = '임상시험시행기관'
+	        </if>
+	        <if test='service == "n"'>
+	        	and serviceScopeCategory = ''
+	        </if>
+			) t1 
+		group by substring_index(substring_index(address, ' ', 2), ' ', -1)
+	
+	</select>
+	
+	<select id="selectHospitalCountByParam" parameterType="Map" resultType="Map">
+	
+		select id, 
+		       count(*) as cnt, 
+		       replace(substring_index(serviceScope, ',', -2), ',', '') as scope 
+		from lds2022setid9 
+		where substring_index(substring_index(address, ' ', 2), ' ', -1) = #{district}
+		and croType in (<foreach collection="croType" item="c" separator=",">#{c}</foreach>)
+		<if test='service == "y"'>
+        	and serviceScopeCategory = '임상시험시행기관'
+        </if>
+        <if test='service == "n"'>
+        	and serviceScopeCategory = ''
+        </if>
+		group by scope
+		order by scope
+	
+	</select>
+	
+	<select id="selectStomachState" parameterType="Map" resultType="Map">
+		
+		select lesionYn,
+			   cancerYn,
+			   location
+		from lds2022setid10
+		where imageName = #{fileName} 
+				
+	</select>
+	
+	<select id="selectDistrictList" resultType="Map">
+		
+		select distinct district 
+	 	from lds2022setid11 
+	 	where district != '옹진군'
+	 	order by district
+		
+	</select>
+	
+	<select id="selectDistrictInformation" parameterType="Map" resultType="Map">
+		<![CDATA[
+			select date_format(time, '%Y-%m-%d') as time, 
+				   district, 
+				   dong, 
+				   temperature, 
+				   humidity, 
+				   discomfortIdx, 
+				   light, 
+				   count, 
+				   speed
+			from lds2022setid11
+			where district = #{district}
+			and time = #{time} 
+			limit 10
+		]]>
+	</select>
+	
+	<select id="selectDrinkAmnt" parameterType="Map" resultType="Map">
+		
+		select childInfoId,
+			   classInfoId,
+			   sum(drinkAmnt) drinkAmnt
+		from lds2022setid12
+		where time = #{time}
+		group by time, childInfoId
+		order by childInfoId
+		
+	</select>
+	
+</mapper>
